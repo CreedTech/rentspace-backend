@@ -1,0 +1,65 @@
+name: Rentspace GCP Deployment
+on:
+  push:
+    branches: ['feat/providus-integration']
+
+jobs:
+  deploy_dev:
+    name: Deploy to Development
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Deploy to Development Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DEV_HOST }}
+          username: ${{ secrets.DEV_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.PORT }}
+          command_timeout: 5m
+          script: |
+            echo '🚀 Changing directory'
+            cd /home/rentspacedev/
+            ls -l
+            cd rentspacetech-backend/
+            ls -l
+            
+            # Fetch and pull changes using Git with authentication
+            git pull https://RentSpaceDev:${{ secrets.PRIVATE_TOKEN }}@github.com/Rentspace-Technology-Ltd/rentspacetech-backend.git feat/providus-integration
+
+            echo '🚀 Updates successfully pulled from branch'
+
+            # Install dependencies
+            # npm install
+            
+            echo 'packages installed'
+
+            # Restart Node.js app
+            pm2 restart server
+            echo '🔄 Node.js app restarted'
+
+            # Check if PM2 restarted successfully
+            if [ $? -ne 0 ]; then
+              echo '❌ Failed to restart Node.js app'
+              exit 1
+            fi
+            
+            echo '✅ Deployment completed successfully'
+
+  health_check:
+    name: Health Check
+    runs-on: ubuntu-latest
+    needs: deploy_dev
+    steps:
+      - name: Wait for application to start
+        run: sleep 60
+
+      - name: Check Health
+        run: |
+          if ! curl -sSf http://35.223.163.78/; then
+            echo '❌ Health check failed'
+            exit 1
+          fi
+          echo '✅ Health check passed'
